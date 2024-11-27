@@ -1,0 +1,284 @@
+---
+title: "Seminar Study 1a"
+output: html_document
+date: "2024-11-26"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+## Chi-squared power calculation
+
+
+```{r cars}
+library(pwr)
+pwr.chisq.test(w = 0.27, N = NULL, df = 1, sig.level = .05, power = .8)
+```
+
+## Loading data CSV
+
+```{r pressure, echo=FALSE}
+# Get the current working directory
+current_directory <- getwd()
+file_name = "Dataset_S1A.csv"
+# Get the absolute path of a file or directory
+relative_path <- paste(current_directory, file_name, sep = "/")
+absolute_path <- normalizePath(relative_path)
+```
+
+
+## Data Info
+
+Gender (
+  1 = female 
+  2 = male
+  )
+  
+  Age
+  
+Condition (
+  0 = Observer perspective condition
+  1 = Employee perspective condition
+  )
+  
+Preferences_human_versus_robotic_replacement (
+  1 = Preference human replacement
+  2 = Preference robotic replacement
+  )
+  
+Attention_check (
+  1 = failed
+  2 = passed
+  3 = failed
+  )
+  
+Qualitative_question
+
+Education (
+  1 = Less than high school
+  2 = High School
+  3 = Some college, no degree
+  4 = Bachelor/Master`s degree
+  5 = Doctoral degree
+  6 = Other
+  )
+  
+Occupation (
+  1 = Legislators, senior officias and managers
+  2 = Professionals or Technicians
+  3 = Clerks
+  4 = Service workers and shop and market sales workers
+  5 = Skilled agricultural and fishery workers
+  6 = Craft and related trades workers
+  7 = Plant and machine operators and assemblers
+  8 = Elementary occupations
+  9 = Armed forced
+  10 = Other
+  )
+  
+Income (
+  1 = Below $20,000 
+  2 = $20,000 - $29,999
+  3 = $30,000 - $39,999 
+  4 = $40,000 - $49,999 
+  5 = $50,000 or more
+  )
+
+
+
+## Set up variables
+
+```{r pressure, echo=FALSE}
+
+df <- read.csv(absolute_path, sep = ";")
+
+# Display the first few rows of the data frame
+condition <- df['Condition']
+preferences <- df['Preferences_human_versus_robotic_replacement']
+attention_check <- df['Attention_check']
+
+
+```
+# Data analysis
+
+## Z-SCORE
+
+```{r pressure, echo=FALSE}
+
+
+# Observer Perspective (human vs robots)
+
+condition_observer_worker <- 0                            # (0 == observer and 1 == worker )
+n_human <- sum(condition == condition_observer_worker & 
+                 preferences == 1 & attention_check == 2) # Number preferring human replacement
+n_robot <- sum(condition == condition_observer_worker & 
+                 preferences == 2 & attention_check == 2) # Number preferring robot replacement
+total <- n_human + n_robot                                # Total sample size
+
+
+# Proportion test with the null hypothesis that both groups are equally preferred (p = 0.5)
+
+binom_test <- binom.test(n_human,                   
+                         total, 
+                         p = 0.5, 
+                         alternative = "two.sided",
+                         conf.level = 0.95)                         
+                                                                        
+# Z-score
+
+p_hat <- n_human / total                                        # Observed proportion
+p0 <- 0.5                                                       # Null hypothesis proportion
+z_score <- (p_hat - p0) / sqrt((p0 * (1 - p0)) / n_observer)    # Compute the Z-score
+
+
+# Compute Cohen's h
+
+p1 <-  as.numeric(binom_test$estimate)                          # Proportion preferring human replacement
+p2 <- 0.5                                                       # Null proportion
+cohen_h <- 2 * (asin(sqrt(p1)) - asin(sqrt(p2)))
+
+
+conf_interval <- binom_test$conf.int
+conf_interval_string <- paste("95% CI: (",round(conf_interval[1], 3),",",round(conf_interval[2],3),")")
+formatted_string_z <- sprintf("[%.2f%% versus %.2f%%; Z = %.4f; p = %.2f; %s ; Cohen_h: %.2f]",
+                            (p1*100), (1-p1)*100,z_score, binom_test$p.value ,conf_interval_string, cohen_h)
+result_z_score <- function(p)
+if (p< 0.05){
+  result_z <- sprintf("%.2f < 0.05 -> Reject H0, both proportions are different",p)
+} else{
+  result_z <- sprintf("%.2f > 0.05 ->  Not Reject H0, both proportions are equal",p)
+}
+
+```
+
+
+## CHI-SQAURE
+
+```{r pressure, echo=FALSE}
+
+
+# Observed counts
+
+observer_human <- sum(condition == 0 & preferences == 1 & attention_check == 2) # Participants in observer condition preferring human replacement
+observer_robot <- sum(condition == 0 & preferences == 2 & attention_check == 2) # Participants in observer condition preferring robot replacement
+employee_human <- sum(condition == 1 & preferences == 1 & attention_check == 2) # Participants in employee condition preferring human replacement
+employee_robot <- sum(condition == 1 & preferences == 2 & attention_check == 2) # Participants in employee condition preferring robot replacement
+total_human <- observer_human + employee_human
+total_robot <- observer_robot + employee_robot
+
+# Create the contingency table
+
+data <- matrix(c(observer_human, observer_robot, 
+                 employee_human, employee_robot), 
+               nrow = 2, byrow = TRUE)
+rownames(data) <- c("Observer", "Employee")
+colnames(data) <- c("Human", "Robot")
+
+chi_square_test <- chisq.test(data, correct=FALSE) # Perform chi-square test
+
+
+# Confidential Interval
+
+prop_test <- prop.test(c(observer_human, observer_robot), c(total_human,total_robot), correct=FALSE)
+conf_interval <- prop_test$conf.int
+conf_interval_string <- paste("95% CI: (",round(conf_interval[1], 3),",",round(conf_interval[2],3),")")
+
+# Parameters for Cramér's V
+
+n <- sum(data)                                 # Total number of observations
+min_dim <- min(dim(data))       # Minimum dimension of the table
+chi_square_value <- chi_square_test$statistic  # Chi-square statistic
+
+cramers_v <- function(chi_square, n, min_dim) { # Function to calculate Cramér's V
+  sqrt(chi_square / (n * (min_dim - 1)))
+}
+
+
+cramers_v_value <- cramers_v(chi_square_value, n, min_dim) # Calculate Cramér's V
+
+
+
+formatted_string_chi <- sprintf("[X-squared(%s) = %.2f; p= %.2f; %s; Cramer's V = %.2f]",chi_square_test$parameter,chi_square_value,chi_square_test$p.value,conf_interval_string,cramers_v_value)
+result_chi <- function(p)
+if (p< 0.05){
+  result_z <- sprintf("%.2f < 0.05 -> Reject H0",p)
+} else{
+  result_z <- sprintf("%.2f > 0.05 ->  Not Reject H0",p)
+}
+
+```
+
+
+
+## LOGISSTIC REGRESION
+
+```{r pressure, echo=FALSE}
+# Step 1: Create the dataset
+# Perspective: 0 = Observer, 1 = Employee
+# Preference: 1 = Human replacement, 2 = Robot replacement
+
+new_df <- df[, c("Condition", "Preferences_human_versus_robotic_replacement","Attention_check")]
+filtered_df <- new_df[new_df$Attention_check == 2, ]
+
+# Step 2: Combine the data into a data frame
+data <- data.frame(perspective = filtered_df$Condition, preference = filtered_df$Preferences_human_versus_robotic_replacement)
+
+# Convert 'preference' to a factor
+data$preference <- factor(data$preference, levels = c(1, 2), labels = c("Human", "Robot"))
+
+# Convert 'perspective' to a factor
+data$perspective <- factor(data$perspective, levels = c(0, 1), labels = c("Observer", "Employee"))
+
+# Step 3: Run the logistic regression model
+# Logistic regression model predicting preference based on perspective
+logistic_model <- glm(preference ~ perspective, data = data, family = binomial)
+
+# Step 4: Calculate the Odds Ratio (exp(coefficient)) for interpretation
+odds_ratio <- exp(coef(logistic_model))
+
+# Step 5: Calculate and display the 95% Confidence Interval for the coefficient
+confint_values_logistic <- confint(logistic_model)  # Get confidence intervals for the coefficients
+conf_interval_logistic_regression_string <- paste("95% CI: (",round(confint_values_logistic[2,1], 3),",",round(confint_values_logistic[2,2],3),")")
+
+
+# Step 6: Extract the Z-value (Wald statistic) and P-value from the summary output
+z_value <- coef(summary(logistic_model))["perspectiveEmployee", "z value"]
+p_value <- coef(summary(logistic_model))["perspectiveEmployee", "Pr(>|z|)"]
+
+formatted_logistic_regression <- sprintf("[b=%.2f; Z= %.2f; p= %.2f; %s]",logistic_model$coefficients["perspectiveEmployee"], z_value, p_value,conf_interval_logistic_regression_string)
+
+```
+
+
+## Results
+
+```{r pressure, echo=FALSE}
+cat('\t\t\t----------------------------------\n')
+cat('\t\t\t|  Z-Score Observer perspective. |\n')
+cat('\t\t\t----------------------------------\n')
+cat('*',formatted_string_z,'\n')
+cat('*',result_z_score(binom_test$p.value),'\n\n')
+cat('|---------------------------------------------------------------------------------------------|\n\n')
+
+cat('\t\t\t----------------------------------\n')
+cat("\t\t\t|         Chi-square Analysis    |\n")
+cat('\t\t\t----------------------------------\n')
+cat('*',formatted_string_chi,'\n')
+cat('*',result_chi(chi_square_test$p.value),'\n\n')
+cat('|---------------------------------------------------------------------------------------------|\n\n')
+
+cat('\t\t\t ----------------------------------\n')
+cat('\t\t\t|        Logistic Regression       |\n')
+cat('\t\t\t ----------------------------------\n')
+cat('*',formatted_logistic_regression,'\n\n')
+cat('\tSummary logistic regression\n')
+summary(logistic_model)
+cat(' \tOdds ration \n\n')
+odds_ratio
+cat('|---------------------------------------------------------------------------------------------|\n\n')
+```
+
+
+
